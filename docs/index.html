@@ -798,8 +798,12 @@
       try {
         const resp = await fetch(PROGRESS_URL + '?t=' + Date.now());
         if (!resp.ok) throw new Error("Status " + resp.status);
-        const files = await resp.json();
+        const raw = await resp.json();
+        // Support both old format (plain list) and new format ({files:[...], subjects:[...]})
+        const files = Array.isArray(raw) ? raw : (raw.files || []);
+        const doneSubjects = Array.isArray(raw) ? [] : (raw.subjects || []);
         allFiles = files;
+        document.getElementById('subjectCountBadge').title = `${doneSubjects.length} subjects fully confirmed complete`;
 
         let qp = 0, ms = 0, er = 0, gt = 0, other = 0;
         subjectStats = {};

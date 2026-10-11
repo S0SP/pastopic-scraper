@@ -70,18 +70,26 @@ def fetch(url, stream=False):
 
 
 # ─── Progress ─────────────────────────────────────────────────────────────────
-def load_progress() -> set:
+def load_progress() -> tuple[set, set]:
+    """Returns (done_files: set, done_subjects: set)"""
     if PROGRESS_FILE.exists():
         with open(PROGRESS_FILE) as f:
             data = json.load(f)
-        log.info(f"Resumed from local progress.json — {len(data)} files done.")
-        return set(data)
-    return set()
+        # Support old format (plain list) and new format (dict with files + subjects)
+        if isinstance(data, list):
+            done_files = set(data)
+            done_subjects = set()
+        else:
+            done_files = set(data.get("files", []))
+            done_subjects = set(data.get("subjects", []))
+        log.info(f"Resumed — {len(done_files)} files done, {len(done_subjects)} subjects fully complete.")
+        return done_files, done_subjects
+    return set(), set()
 
 
-def save_progress(done: set):
+def save_progress(done: set, done_subjects: set):
     with open(PROGRESS_FILE, "w") as f:
-        json.dump(sorted(done), f)
+        json.dump({"files": sorted(done), "subjects": sorted(done_subjects)}, f)
 
 
 # ─── HF Dataset push ─────────────────────────────────────────────────────────
@@ -110,11 +118,11 @@ def push_batch(api: HfApi, paths: list[Path], include_progress=False, msg_prefix
         log.warning(f"  [HF] Push error: {e}")
 
 
-def push_progress_only(api: HfApi, done: set, label="Update progress"):
+def push_progress_only(api: HfApi, done: set, done_subjects: set, label="Update progress"):
     """Push just the progress.json to HF so the dashboard refreshes."""
     if not api or not DATASET_REPO:
         return
-    save_progress(done)
+    save_progress(done, done_subjects)
     try:
         api.create_commit(
             repo_id=DATASET_REPO, repo_type="dataset",
@@ -122,7 +130,7 @@ def push_progress_only(api: HfApi, done: set, label="Update progress"):
                                            path_or_fileobj=str(PROGRESS_FILE))],
             commit_message=f"{label} ({time.strftime('%Y-%m-%d %H:%M')} UTC)",
         )
-        log.info(f"  [HF] Progress.json updated — {len(done)} total files")
+        log.info(f"  [HF] Progress.json updated — {len(done)} files, {len(done_subjects)} subjects complete")
     except Exception as e:
         log.warning(f"  [HF] Progress push error: {e}")
 
@@ -229,24 +237,20 @@ def main():
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     api  = HfApi(token=HF_TOKEN) if HF_TOKEN else None
-    done = load_progress()
+    done, done_subjects = load_progress()
 
     # Push progress.json immediately so dashboard shows latest count
     if api and done:
         log.info("Pushing current progress to HF for dashboard refresh …")
-        push_progress_only(api, done, label="Run started — current progress")
+        push_progress_only(api, done, done_subjects, label="Run started — current progress")
 
     subjects = discover_all_subjects()
-    log.info(f"Starting — {len(subjects)} subjects, {len(done)} already done.\n")
+    log.info(f"Starting — {len(subjects)} subjects, {len(done)} files done, {len(done_subjects)} subjects fully skippable.\n")
 
-    # Pre-compute which subjects have at least one pending file
-    # by checking if any known done entry starts with subject prefix.
-    # We do a fast check: if the number of done entries for a subject's prefix
-    # seems very high relative to its expected count, we peek at one page to confirm.
-    done_prefixes = {}  # prefix -> count of done files under it
+    # Pre-compute done file counts per subject prefix for display
+    done_prefixes = {}
     for key in done:
         slash_key = key.replace("\\", "/")
-        # prefix = e.g. "papers/A-Level/Accounting_9706/"
         parts = slash_key.split("/")
         if len(parts) >= 3:
             prefix = "/".join(parts[:3]) + "/"
@@ -261,11 +265,17 @@ def main():
             log.info("Time limit approaching — stopping gracefully.")
             break
 
-        prefix = build_subject_prefix(subj)
-        # Count how many done files belong to this subject
-        done_count = done_prefixes.get(prefix.replace("papers/", "papers/"), 0)
+        subj_key = f"{subj['level']}/{subj['code']}"
+        prefix   = build_subject_prefix(subj)
+        done_count = done_prefixes.get(prefix, 0)
 
-        log.info(f"\n[{subj['level']}] {subj['name']} ({subj['code']}) — {done_count} done locally")
+        # ── FAST SKIP: subject fully confirmed complete from a prior run ──
+        if subj_key in done_subjects:
+            log.info(f"[{subj['level']}] {subj['name']} ({subj['code']}) — SKIPPED ({done_count} files, confirmed complete)")
+            subjects_skipped += 1
+            continue
+
+        log.info(f"\n[{subj['level']}] {subj['name']} ({subj['code']}) — {done_count} done locally (checking for new files)")
         pages = get_paper_pages(subj)
         log.info(f"  {len(pages)} paper pages")
 
@@ -304,7 +314,7 @@ def main():
                     time.sleep(DOWNLOAD_DELAY)
 
                     if len(pending) >= HF_PUSH_EVERY:
-                        save_progress(done)
+                        save_progress(done, done_subjects)
                         push_batch(api, pending, include_progress=True)
                         pending.clear()
 
@@ -313,16 +323,17 @@ def main():
                     if sp.exists(): sp.unlink()
 
         if subj_new == 0:
-            log.info(f"  ✓ Subject complete (all files already done)")
+            log.info(f"  ✓ Subject complete — marking for fast-skip on future runs")
+            done_subjects.add(subj_key)
             subjects_skipped += 1
 
     # Final push
-    save_progress(done)
+    save_progress(done, done_subjects)
     if pending:
         push_batch(api, pending, include_progress=True)
     elif api:
-        # Push updated progress even if no new files downloaded
-        push_progress_only(api, done, label="Run complete — final progress")
+        # Push updated progress (with done_subjects) even if no new files
+        push_progress_only(api, done, done_subjects, label="Run complete — final progress")
 
     log.info(f"\n{'='*65}")
     log.info(f"Done. Downloaded {total_dl} new files this run.")
