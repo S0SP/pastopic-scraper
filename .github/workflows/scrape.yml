@@ -1,0 +1,58 @@
+name: PastTopic Scraper — 6hr Batch
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # every 6 hours
+  workflow_dispatch:         # manual trigger button in GitHub UI
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    env:
+      HF_TOKEN:     ${{ secrets.HF_TOKEN }}
+      DATASET_REPO: ${{ secrets.DATASET_REPO }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install requests beautifulsoup4 lxml huggingface_hub
+
+      # Pull latest progress.json from HF Dataset (so we resume properly)
+      - name: Pull progress from HF Dataset
+        run: |
+          python - <<'EOF'
+          import os
+          from huggingface_hub import hf_hub_download
+          try:
+              path = hf_hub_download(
+                  repo_id=os.environ["DATASET_REPO"],
+                  filename="progress.json",
+                  repo_type="dataset",
+                  token=os.environ["HF_TOKEN"],
+              )
+              import shutil; shutil.copy(path, "progress.json")
+              import json
+              n = len(json.load(open("progress.json")))
+              print(f"Resumed — {n} files already done.")
+          except Exception as e:
+              print(f"No prior progress: {e}")
+          EOF
+
+      - name: Run scraper (6-hour window)
+        run: python scraper_ci.py
+
+      - name: Show summary
+        if: always()
+        run: |
+          PDFS=$(find papers -name '*.pdf' 2>/dev/null | wc -l)
+          echo "## Scraper Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- PDFs downloaded this session: **$PDFS**" >> $GITHUB_STEP_SUMMARY
+          echo "- Dataset: https://huggingface.co/datasets/$DATASET_REPO" >> $GITHUB_STEP_SUMMARY
+          echo "- Next auto-run: in ~6 hours" >> $GITHUB_STEP_SUMMARY
