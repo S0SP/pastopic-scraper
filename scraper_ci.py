@@ -247,7 +247,7 @@ def main():
     subjects = discover_all_subjects()
     log.info(f"Starting — {len(subjects)} subjects, {len(done)} files done, {len(done_subjects)} subjects fully skippable.\n")
 
-    # Pre-compute done file counts per subject prefix for display
+    # Pre-compute done file counts per subject prefix for display and prioritization
     done_prefixes = {}
     for key in done:
         slash_key = key.replace("\\", "/")
@@ -255,6 +255,12 @@ def main():
         if len(parts) >= 3:
             prefix = "/".join(parts[:3]) + "/"
             done_prefixes[prefix] = done_prefixes.get(prefix, 0) + 1
+
+    # Prioritize: unscraped subjects (0 files) come first, already-done subjects come last
+    subjects.sort(key=lambda s: (
+        f"{s['level']}/{s['code']}" in done_subjects,
+        done_prefixes.get(build_subject_prefix(s), 0)
+    ))
 
     pending: list[Path] = []
     total_dl = 0
