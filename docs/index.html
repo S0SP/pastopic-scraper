@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PastTopic Scraper — Live Progress & Control Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --card-border: #1f2937;
+      --card-hover: #1e293b;
+      --text-main: #f3f4f6;
+      --text-sub: #9ca3af;
+      --text-dim: #6b7280;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59, 130, 246, 0.25);
+      --green: #10b981;
+      --green-glow: rgba(16, 185, 129, 0.25);
+      --yellow: #f59e0b;
+      --yellow-glow: rgba(245, 158, 11, 0.2);
+      --red: #ef4444;
+      --purple: #8b5cf6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Background glow decorations */
+    .bg-blur {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.15;
+    }
+    .blur-top-left {
+      top: -100px;
+      left: -100px;
+      width: 500px;
+      height: 500px;
+      background: #3b82f6;
+    }
+    .blur-top-right {
+      top: 50px;
+      right: -100px;
+      width: 450px;
+      height: 450px;
+      background: #10b981;
+    }
+
+    /* Container */
+    .app-container {
+      position: relative;
+      z-index: 1;
+      max-width: 1380px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 28px 24px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-badge {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+
+    .brand-info h1 {
+      font-size: 1.45rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+
+    .brand-info p {
+      font-size: 0.85rem;
+      color: var(--text-sub);
+      margin-top: 2px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 9px 16px;
+      border-radius: 8px;
+      text-decoration: none;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #ffffff;
+      border-color: #3b82f6;
+    }
+    .btn-primary:hover {
+      box-shadow: 0 0 16px var(--accent-glow);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: #1f2937;
+      color: var(--text-main);
+      border-color: #374151;
+    }
+    .btn-secondary:hover {
+      background: #374151;
+      transform: translateY(-1px);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.25);
+    }
+
+    /* Auto-refresh & Sync status bar */
+    .sync-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(17, 24, 39, 0.8);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 0.82rem;
+      color: var(--text-sub);
+    }
+
+    .sync-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .live-pulse {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+      position: relative;
+    }
+    .live-pulse.pulse-anim::after {
+      content: '';
+      position: absolute;
+      top: -3px;
+      left: -3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--green);
+      opacity: 0.5;
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.8); opacity: 0.8; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+
+    .refresh-counter {
+      color: var(--accent);
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: #374151;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--card-accent, #3b82f6);
+    }
+
+    .stat-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+    }
+
+    .stat-number {
+      font-size: 2.2rem;
+      font-weight: 800;
+      margin: 8px 0 4px;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: -0.03em;
+    }
+
+    .stat-desc {
+      font-size: 0.78rem;
+      color: var(--text-sub);
+    }
+
+    /* Runner Status Banner */
+    .runner-card {
+      background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(30, 41, 59, 0.8));
+      border: 1px solid #2d3748;
+      border-radius: 14px;
+      padding: 22px 26px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .runner-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .runner-icon-wrap {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    .runner-details h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-badge {
+      font-size: 0.75rem;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .badge-in-progress {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .badge-completed {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+    }
+    .badge-queued {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .runner-meta {
+      font-size: 0.82rem;
+      color: var(--text-sub);
+      margin-top: 5px;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .runner-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Section Header */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .section-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Filters & Search */
+    .search-box {
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 8px 14px;
+      color: #fff;
+      font-size: 0.85rem;
+      width: 260px;
+      outline: none;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+    .search-box:focus {
+      border-color: var(--accent);
+    }
+
+    /* Tab Switcher */
+    .tab-pills {
+      display: flex;
+      background: #111827;
+      border: 1px solid var(--card-border);
+      padding: 4px;
+      border-radius: 10px;
+      gap: 4px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-sub);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: #2563eb;
+      color: #fff;
+    }
+    .tab-btn:hover:not(.active) {
+      color: #fff;
+      background: #1f2937;
+    }
+
+    /* Tables & Lists */
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+
+    th {
+      background: #161e2e;
+      color: var(--text-dim);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--card-border);
+      font-weight: 600;
+    }
+
+    td {
+      padding: 12px 18px;
+      border-bottom: 1px solid #1a2234;
+      color: var(--text-sub);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .mono-cell {
+      font-family: 'JetBrains Mono', monospace;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .tag-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .tag-qp { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+    .tag-ms { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .tag-er { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+    .tag-gt { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+
+    .file-link {
+      color: #60a5fa;
+      text-decoration: none;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+    }
+    .file-link:hover {
+      text-decoration: underline;
+    }
+
+    /* Grid layout for subjects */
+    .subject-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 14px;
+      max-height: 480px;
+      overflow-y: auto;
+      padding: 16px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+    }
+
+    .subject-card {
+      background: #161f30;
+      border: 1px solid #232f45;
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .subject-card:hover {
+      border-color: #3b82f6;
+      transform: translateY(-2px);
+    }
+
+    .subj-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .subj-name {
+      font-weight: 600;
+      color: #fff;
+      font-size: 0.9rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 190px;
+    }
+    .subj-count {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      color: #34d399;
+      font-size: 0.85rem;
+    }
+
+    .subj-tags {
+      display: flex;
+      gap: 5px;
+      margin-top: 4px;
+      flex-wrap: wrap;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: auto;
+      text-align: center;
+      padding: 24px 0 10px;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      border-top: 1px solid var(--card-border);
+    }
+
+    footer a {
+      color: var(--text-sub);
+      text-decoration: none;
+    }
+    footer a:hover {
+      color: var(--accent);
+    }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-blur blur-top-left"></div>
+  <div class="bg-blur blur-top-right"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header>
+      <div class="brand-wrap">
+        <div class="logo-badge">📚</div>
+        <div class="brand-info">
+          <h1>PastTopic Scraper Console</h1>
+          <p>Cambridge IGCSE, A-Level & O-Level Automated Cloud Pipeline</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="refreshBtn" class="btn btn-secondary" onclick="manualRefresh()">
+          <span id="refreshIcon">🔄</span> Refresh Now
+        </button>
+        <a href="https://github.com/S0SP/pastopic-scraper/actions" target="_blank" class="btn btn-primary">
+          ⚙️ GitHub Actions
+        </a>
+        <a href="https://huggingface.co/datasets/s0sp/pastopic-papers" target="_blank" class="btn btn-secondary">
+          🤗 HF Dataset
+        </a>
+      </div>
+    </header>
+
+    <!-- Auto Sync Bar -->
+    <div class="sync-bar">
+      <div class="sync-left">
+        <div id="livePulse" class="live-pulse pulse-anim"></div>
+        <span id="syncStatusText">Connecting to cloud endpoints...</span>
+      </div>
+      <div>
+        Next refresh in <span id="countdown" class="refresh-counter">10</span>s
+      </div>
+    </div>
+
+    <!-- Active Runner Status -->
+    <div class="runner-card">
+      <div class="runner-info">
+        <div id="runnerIcon" class="runner-icon-wrap">⚡</div>
+        <div class="runner-details">
+          <h3>
+            <span id="runnerName">Cloud Scraper Runner</span>
+            <span id="runnerBadge" class="status-badge badge-in-progress">Checking...</span>
+          </h3>
+          <div class="runner-meta">
+            <span id="runnerDuration">⏱️ Runtime: --</span>
+            <span id="runnerId">🆔 Run ID: --</span>
+            <span id="runnerTrigger">🚀 Trigger: Scheduled</span>
+            <span id="runnerCommit">📌 Branch: main</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <a id="runnerLogsBtn" href="https://github.com/S0SP/pastopic-scraper/actions" target="_blank" class="btn btn-secondary">
+          📋 View Live Logs
+        </a>
+        <a href="https://github.com/S0SP/pastopic-scraper/actions/workflows/scrape.yml" target="_blank" class="btn btn-primary">
+          ▶ Trigger Run
+        </a>
+      </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card" style="--card-accent: #10b981;">
+        <span class="stat-title">Total Papers Scraped</span>
+        <div id="totalPapers" class="stat-number">--</div>
+        <span class="stat-desc">Synchronized to Hugging Face</span>
+      </div>
+      <div class="stat-card" style="--card-accent: #3b82f6;">
+        <span class="stat-title">Question Papers (QP)</span>
+        <div id="totalQP" class="stat-number">--</div>
+        <span class="stat-desc">Exam question booklets</span>
+      </div>
+      <div class="stat-card" style="--card-accent: #10b981;">
+        <span class="stat-title">Mark Schemes (MS)</span>
+        <div id="totalMS" class="stat-number">--</div>
+        <span class="stat-desc">Official answer guides</span>
+      </div>
+      <div class="stat-card" style="--card-accent: #f59e0b;">
+        <span class="stat-title">Examiner Reports (ER)</span>
+        <div id="totalER" class="stat-number">--</div>
+        <span class="stat-desc">Feedback & performance notes</span>
+      </div>
+      <div class="stat-card" style="--card-accent: #8b5cf6;">
+        <span class="stat-title">Grade Thresholds (GT)</span>
+        <div id="totalGT" class="stat-number">--</div>
+        <span class="stat-desc">Boundary percentiles</span>
+      </div>
+    </div>
+
+    <!-- Subjects Section -->
+    <div>
+      <div class="section-header">
+        <h2 class="section-title">
+          <span>📊 Subject Progress Breakdown</span>
+          <span id="subjectCountBadge" class="tag-badge tag-qp">0 Subjects</span>
+        </h2>
+        <div style="display:flex; gap:10px;">
+          <input type="text" id="subjectSearch" class="search-box" placeholder="Filter subject name or code..." oninput="renderSubjects()" />
+        </div>
+      </div>
+      <div id="subjectGrid" class="subject-grid" style="margin-top:14px;">
+        <div style="color:var(--text-dim); padding:20px; text-align:center; grid-column: 1/-1;">
+          Loading subject breakdown...
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Files Stream -->
+    <div>
+      <div class="section-header">
+        <h2 class="section-title">
+          <span>⚡ Latest Uploaded Files</span>
+          <span id="recentCountBadge" class="tag-badge tag-ms">Real-time Stream</span>
+        </h2>
+        <div class="tab-pills">
+          <button class="tab-btn active" onclick="filterBoard('ALL', this)">All</button>
+          <button class="tab-btn" onclick="filterBoard('A-Level', this)">A-Level</button>
+          <button class="tab-btn" onclick="filterBoard('IGCSE', this)">IGCSE</button>
+          <button class="tab-btn" onclick="filterBoard('O-Level', this)">O-Level</button>
+        </div>
+      </div>
+      <div class="table-container" style="margin-top:14px;">
+        <table>
+          <thead>
+            <tr>
+              <th>File Name</th>
+              <th>Board</th>
+              <th>Subject</th>
+              <th>Type</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="filesTableBody">
+            <tr>
+              <td colspan="5" style="text-align:center; padding:30px; color:var(--text-dim);">
+                Fetching uploaded papers list...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <p>
+        PastTopic Scraper & Pipeline · Pushed continuously to
+        <a href="https://huggingface.co/datasets/s0sp/pastopic-papers" target="_blank">HF Dataset (s0sp/pastopic-papers)</a> ·
+        Managed via <a href="https://github.com/S0SP/pastopic-scraper" target="_blank">GitHub Actions</a>
+      </p>
+    </footer>
+  </div>
+
+  <script>
+    const GITHUB_REPO = "S0SP/pastopic-scraper";
+    const HF_DATASET = "s0sp/pastopic-papers";
+    const PROGRESS_URL = `https://huggingface.co/datasets/${HF_DATASET}/raw/main/progress.json`;
+    const GITHUB_RUNS_URL = `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=5`;
+
+    let allFiles = [];
+    let subjectStats = {};
+    let currentBoardFilter = 'ALL';
+    let countdownSec = 10;
+    let timer = null;
+
+    async function fetchGitHubStatus() {
+      try {
+        const resp = await fetch(GITHUB_RUNS_URL);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const runs = data.workflow_runs || [];
+        if (runs.length === 0) return;
+
+        const latest = runs[0];
+        const statusBadge = document.getElementById('runnerBadge');
+        const durationEl = document.getElementById('runnerDuration');
+        const idEl = document.getElementById('runnerId');
+        const triggerEl = document.getElementById('runnerTrigger');
+        const logsBtn = document.getElementById('runnerLogsBtn');
+        const livePulse = document.getElementById('livePulse');
+
+        idEl.textContent = `🆔 Run #${latest.id}`;
+        triggerEl.textContent = `🚀 Trigger: ${latest.event}`;
+        logsBtn.href = latest.html_url;
+
+        // Calculate runtime
+        const start = new Date(latest.created_at);
+        const now = new Date();
+        const diffMin = Math.max(1, Math.round((now - start) / 60000));
+        durationEl.textContent = `⏱️ Runtime: ${diffMin} min`;
+
+        if (latest.status === 'in_progress') {
+          statusBadge.textContent = 'Active (Scraping)';
+          statusBadge.className = 'status-badge badge-in-progress';
+          livePulse.className = 'live-pulse pulse-anim';
+          document.getElementById('runnerIcon').textContent = '⚡';
+        } else if (latest.status === 'queued') {
+          statusBadge.textContent = 'Queued';
+          statusBadge.className = 'status-badge badge-queued';
+          livePulse.className = 'live-pulse';
+          document.getElementById('runnerIcon').textContent = '⏳';
+        } else {
+          statusBadge.textContent = `Idle (${latest.conclusion || 'Completed'})`;
+          statusBadge.className = 'status-badge badge-completed';
+          livePulse.className = 'live-pulse';
+          document.getElementById('runnerIcon').textContent = '💤';
+        }
+      } catch (err) {
+        console.warn("GitHub status fetch err:", err);
+      }
+    }
+
+    async function fetchProgressData() {
+      try {
+        const resp = await fetch(PROGRESS_URL + '?t=' + Date.now());
+        if (!resp.ok) throw new Error("Status " + resp.status);
+        const files = await resp.json();
+        allFiles = files;
+
+        let qp = 0, ms = 0, er = 0, gt = 0, other = 0;
+        subjectStats = {};
+
+        for (const path of files) {
+          const parts = path.split('/');
+          const board = parts.length > 1 ? parts[1] : 'Unknown';
+          const subject = parts.length > 2 ? parts[2] : 'Unknown';
+          const fn = parts[parts.length - 1].toLowerCase();
+
+          let type = 'OTHER';
+          if (fn.includes('_qp')) { qp++; type = 'QP'; }
+          else if (fn.includes('_ms')) { ms++; type = 'MS'; }
+          else if (fn.includes('_er')) { er++; type = 'ER'; }
+          else if (fn.includes('_gt')) { gt++; type = 'GT'; }
+          else { other++; }
+
+          if (!subjectStats[subject]) {
+            subjectStats[subject] = { board, total: 0, qp: 0, ms: 0, er: 0, gt: 0 };
+          }
+          subjectStats[subject].total++;
+          if (type === 'QP') subjectStats[subject].qp++;
+          if (type === 'MS') subjectStats[subject].ms++;
+          if (type === 'ER') subjectStats[subject].er++;
+          if (type === 'GT') subjectStats[subject].gt++;
+        }
+
+        // Animate or set stats
+        document.getElementById('totalPapers').textContent = files.length.toLocaleString();
+        document.getElementById('totalQP').textContent = qp.toLocaleString();
+        document.getElementById('totalMS').textContent = ms.toLocaleString();
+        document.getElementById('totalER').textContent = er.toLocaleString();
+        document.getElementById('totalGT').textContent = gt.toLocaleString();
+
+        document.getElementById('syncStatusText').textContent =
+          `Connected · ${files.length.toLocaleString()} total papers verified in cloud dataset`;
+
+        renderSubjects();
+        renderFilesTable();
+      } catch (err) {
+        console.error("Progress fetch err:", err);
+        document.getElementById('syncStatusText').textContent = "Waiting for cloud dataset sync...";
+      }
+    }
+
+    function renderSubjects() {
+      const filter = (document.getElementById('subjectSearch').value || '').toLowerCase();
+      const grid = document.getElementById('subjectGrid');
+      grid.innerHTML = '';
+
+      const entries = Object.entries(subjectStats)
+        .filter(([name]) => name.toLowerCase().includes(filter))
+        .sort((a, b) => b[1].total - a[1].total);
+
+      document.getElementById('subjectCountBadge').textContent = `${entries.length} Subjects`;
+
+      if (entries.length === 0) {
+        grid.innerHTML = '<div style="color:var(--text-dim); padding:20px; text-align:center; grid-column:1/-1;">No matching subjects found</div>';
+        return;
+      }
+
+      entries.forEach(([name, data]) => {
+        const cleanName = name.replace(/_/g, ' ');
+        const card = document.createElement('div');
+        card.className = 'subject-card';
+        card.innerHTML = `
+          <div class="subj-header">
+            <span class="subj-name" title="${cleanName}">${cleanName}</span>
+            <span class="subj-count">${data.total}</span>
+          </div>
+          <div style="font-size:0.75rem; color:var(--text-dim);">${data.board}</div>
+          <div class="subj-tags">
+            ${data.qp > 0 ? `<span class="tag-badge tag-qp">${data.qp} QP</span>` : ''}
+            ${data.ms > 0 ? `<span class="tag-badge tag-ms">${data.ms} MS</span>` : ''}
+            ${data.er > 0 ? `<span class="tag-badge tag-er">${data.er} ER</span>` : ''}
+            ${data.gt > 0 ? `<span class="tag-badge tag-gt">${data.gt} GT</span>` : ''}
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function filterBoard(board, btn) {
+      currentBoardFilter = board;
+      document.querySelectorAll('.tab-pills .tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderFilesTable();
+    }
+
+    function renderFilesTable() {
+      const tbody = document.getElementById('filesTableBody');
+      tbody.innerHTML = '';
+
+      // Get latest 25 files
+      const recent = allFiles.slice(-150).reverse();
+      const filtered = recent.filter(p => {
+        if (currentBoardFilter === 'ALL') return true;
+        return p.includes(`/${currentBoardFilter}/`);
+      }).slice(0, 25);
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-dim);">No files found for this board yet</td></tr>';
+        return;
+      }
+
+      filtered.forEach(path => {
+        const parts = path.split('/');
+        const board = parts.length > 1 ? parts[1] : '—';
+        const subject = parts.length > 2 ? parts[2].replace(/_/g, ' ') : '—';
+        const fn = parts[parts.length - 1];
+
+        let tagClass = 'tag-qp', typeLabel = 'QP';
+        if (fn.toLowerCase().includes('_ms')) { tagClass = 'tag-ms'; typeLabel = 'Mark Scheme'; }
+        else if (fn.toLowerCase().includes('_er')) { tagClass = 'tag-er'; typeLabel = 'Examiner Report'; }
+        else if (fn.toLowerCase().includes('_gt')) { tagClass = 'tag-gt'; typeLabel = 'Grade Threshold'; }
+        else if (fn.toLowerCase().includes('_qp')) { tagClass = 'tag-qp'; typeLabel = 'Question Paper'; }
+
+        const downloadUrl = `https://huggingface.co/datasets/${HF_DATASET}/resolve/main/${path}`;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span class="mono-cell">${fn}</span></td>
+          <td>${board}</td>
+          <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${subject}</td>
+          <td><span class="tag-badge ${tagClass}">${typeLabel}</span></td>
+          <td><a href="${downloadUrl}" target="_blank" class="file-link">⬇ Download</a></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function refreshAll() {
+      countdownSec = 10;
+      await Promise.all([fetchGitHubStatus(), fetchProgressData()]);
+    }
+
+    function manualRefresh() {
+      const icon = document.getElementById('refreshIcon');
+      icon.innerHTML = '<span class="spinner"></span>';
+      refreshAll().then(() => {
+        icon.innerHTML = '🔄';
+      });
+    }
+
+    function startTimer() {
+      if (timer) clearInterval(timer);
+      timer = setInterval(() => {
+        countdownSec--;
+        if (countdownSec <= 0) {
+          refreshAll();
+          countdownSec = 10;
+        }
+        document.getElementById('countdown').textContent = countdownSec;
+      }, 1000);
+    }
+
+    // Initial load
+    refreshAll();
+    startTimer();
+  </script>
+</body>
+</html>
