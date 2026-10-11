@@ -326,6 +326,10 @@ def main():
             log.info(f"  ✓ Subject complete — marking for fast-skip on future runs")
             done_subjects.add(subj_key)
             subjects_skipped += 1
+            # Push after every 5 confirmed subjects so cancellation doesn't lose progress
+            if subjects_skipped % 5 == 0:
+                push_progress_only(api, done, done_subjects,
+                                   label=f"Checkpoint — {subjects_skipped} subjects confirmed complete")
 
     # Final push
     save_progress(done, done_subjects)
