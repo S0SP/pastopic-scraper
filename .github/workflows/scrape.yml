@@ -2,8 +2,17 @@ name: PastTopic Scraper — 6hr Batch
 
 on:
   schedule:
-    - cron: '0 */6 * * *'   # every 6 hours
+    - cron: '0 0 * * *'    # 00:00 UTC daily  (run 1)
+    - cron: '0 6 * * *'    # 06:00 UTC daily  (run 2)
+    - cron: '0 12 * * *'   # 12:00 UTC daily  (run 3)
+    - cron: '0 18 * * *'   # 18:00 UTC daily  (run 4)
   workflow_dispatch:         # manual trigger button in GitHub UI
+
+# Cancel any already-running scraper before starting a new one,
+# so cron slots never stack up on top of each other.
+concurrency:
+  group: scraper-batch
+  cancel-in-progress: true
 
 jobs:
   scrape:
@@ -36,6 +45,7 @@ jobs:
                   filename="progress.json",
                   repo_type="dataset",
                   token=os.environ["HF_TOKEN"],
+                  force_download=True,
               )
               import shutil; shutil.copy(path, "progress.json")
               import json
@@ -55,4 +65,5 @@ jobs:
           echo "## Scraper Run Summary" >> $GITHUB_STEP_SUMMARY
           echo "- PDFs downloaded this session: **$PDFS**" >> $GITHUB_STEP_SUMMARY
           echo "- Dataset: https://huggingface.co/datasets/$DATASET_REPO" >> $GITHUB_STEP_SUMMARY
-          echo "- Next auto-run: in ~6 hours" >> $GITHUB_STEP_SUMMARY
+          echo "- Dashboard: https://s0sp.github.io/pastopic-scraper/" >> $GITHUB_STEP_SUMMARY
+          echo "- Next auto-run: next 6-hour slot (00/06/12/18 UTC)" >> $GITHUB_STEP_SUMMARY
